@@ -16,7 +16,7 @@ export const checkBadgesToUnlock = (
   const habitBadges = existingBadges.filter(b => b.habitId === habit.id);
   const badgeTypes = habitBadges.map(b => b.type);
 
-  const streak = calculateStreak(habit.id, checkIns);
+  const streak = calculateStreak(habit, checkIns);
   const monthlyRate = calculateMonthlyCompletionRate(habit, checkIns);
   const habitCheckIns = checkIns.filter(c => c.habitId === habit.id && c.completed);
 

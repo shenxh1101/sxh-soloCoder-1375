@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { X } from 'lucide-react';
-import type { Habit, Frequency } from '@/types';
+import type { Habit, Frequency, GoalType } from '@/types';
 import { HABIT_COLORS, HABIT_ICONS } from '@/types';
 
 interface HabitFormProps {
@@ -12,6 +12,7 @@ interface HabitFormProps {
 }
 
 const DEFAULT_GROUPS = ['自我提升', '健康生活', '作息规律', '工作学习', '兴趣爱好'];
+const DEFAULT_UNITS = ['次', '分钟', '小时', '杯', '公里', '页', '个', '篇', '组'];
 
 export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormProps) => {
   const [name, setName] = useState('');
@@ -23,6 +24,11 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
   const [customGroup, setCustomGroup] = useState('');
   const [useCustomGroup, setUseCustomGroup] = useState(false);
   const [priority, setPriority] = useState(3);
+  const [goalType, setGoalType] = useState<GoalType>('boolean');
+  const [goalValue, setGoalValue] = useState(1);
+  const [goalUnit, setGoalUnit] = useState('次');
+  const [customUnit, setCustomUnit] = useState('');
+  const [useCustomUnit, setUseCustomUnit] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -40,6 +46,15 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
         setUseCustomGroup(true);
       }
       setPriority(editHabit.priority);
+      setGoalType(editHabit.goalType);
+      setGoalValue(editHabit.goalValue);
+      if (DEFAULT_UNITS.includes(editHabit.goalUnit)) {
+        setGoalUnit(editHabit.goalUnit);
+        setUseCustomUnit(false);
+      } else {
+        setCustomUnit(editHabit.goalUnit);
+        setUseCustomUnit(true);
+      }
     } else {
       setName('');
       setIcon(HABIT_ICONS[0]);
@@ -50,6 +65,11 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
       setCustomGroup('');
       setUseCustomGroup(false);
       setPriority(3);
+      setGoalType('boolean');
+      setGoalValue(1);
+      setGoalUnit('次');
+      setCustomUnit('');
+      setUseCustomUnit(false);
     }
     setErrors({});
   }, [editHabit, isOpen]);
@@ -72,6 +92,8 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
       return;
     }
 
+    const finalUnit = useCustomUnit ? customUnit.trim() : goalUnit;
+
     onSubmit({
       name: name.trim(),
       icon,
@@ -79,7 +101,10 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
       frequency,
       targetCount,
       group: finalGroup,
-      priority
+      priority,
+      goalType,
+      goalValue,
+      goalUnit: finalUnit
     });
     onClose();
   };
@@ -215,6 +240,106 @@ export const HabitForm = ({ isOpen, onClose, onSubmit, editHabit }: HabitFormPro
                 </button>
               </div>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">目标类型</label>
+            <div className="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600 mb-4">
+              <button
+                type="button"
+                onClick={() => setGoalType('boolean')}
+                className={`flex-1 py-2.5 text-sm font-medium transition-all ${goalType === 'boolean'
+                    ? 'text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                style={goalType === 'boolean' ? { backgroundColor: color } : {}}
+              >
+                是/否型
+              </button>
+              <button
+                type="button"
+                onClick={() => setGoalType('numeric')}
+                className={`flex-1 py-2.5 text-sm font-medium transition-all ${goalType === 'numeric'
+                    ? 'text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                style={goalType === 'numeric' ? { backgroundColor: color } : {}}
+              >
+                数值型
+              </button>
+            </div>
+
+            {goalType === 'numeric' && (
+              <div className="space-y-4 animate-fade-in">
+                <div>
+                  <label className="block text-sm font-medium mb-2">目标数值（每次）</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGoalValue(Math.max(0.1, parseFloat((goalValue - 0.5).toFixed(1))))}
+                      className="w-10 h-[42px] rounded-xl bg-slate-100 dark:bg-slate-700 text-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={goalValue}
+                      onChange={(e) => setGoalValue(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
+                      className="flex-1 h-[42px] text-center rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 focus:outline-none focus:ring-2 focus:ring-brand-500/30 font-bold text-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGoalValue(parseFloat((goalValue + 0.5).toFixed(1)))}
+                      className="w-10 h-[42px] rounded-xl bg-slate-100 dark:bg-slate-700 text-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">单位</label>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomUnit(!useCustomUnit)}
+                      className="text-xs text-brand-500 hover:text-brand-600 font-medium"
+                    >
+                      {useCustomUnit ? '选择预设' : '自定义单位'}
+                    </button>
+                  </div>
+
+                  {useCustomUnit ? (
+                    <input
+                      type="text"
+                      value={customUnit}
+                      onChange={(e) => setCustomUnit(e.target.value)}
+                      placeholder="输入自定义单位"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition-all"
+                    />
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {DEFAULT_UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setGoalUnit(u)}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${goalUnit === u
+                              ? 'text-white shadow-soft'
+                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                            }`}
+                          style={goalUnit === u ? { backgroundColor: color } : {}}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
   closestCenter,
@@ -31,9 +32,11 @@ import { CheckInModal } from '@/components/CheckInModal';
 import { BadgeGallery } from '@/components/BadgeGallery';
 import { SharePoster } from '@/components/SharePoster';
 import { BadgeNotification } from '@/components/BadgeNotification';
+import { ImportModal } from '@/components/ImportModal';
 import { ArrowUpDown, Plus } from 'lucide-react';
 
 export default function Home() {
+  const navigate = useNavigate();
   const {
     habits,
     checkIns,
@@ -44,8 +47,12 @@ export default function Home() {
     updateHabit,
     deleteHabit,
     toggleCheckIn,
+    setCheckInCompleted,
+    updateCheckInNote,
     reorderCards,
-    clearNewBadges
+    clearNewBadges,
+    parseImportFile,
+    applyImportData
   } = useAppStore();
 
   const [sortBy, setSortBy] = useState<'order' | 'priority' | 'group'>('order');
@@ -57,6 +64,7 @@ export default function Home() {
   const [showBadgeGallery, setShowBadgeGallery] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
   const [posterHabit, setPosterHabit] = useState<Habit | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -121,9 +129,9 @@ export default function Home() {
     setShowDeleteConfirm(null);
   };
 
-  const handleToggleCheckIn = (habitId: string, date?: string) => {
+  const handleToggleCheckIn = (habitId: string, date?: string, value?: number) => {
     const targetDate = date || today;
-    toggleCheckIn(habitId, targetDate, '', targetDate !== today);
+    toggleCheckIn(habitId, targetDate, '', targetDate !== today, value);
   };
 
   const handleOpenCheckInModal = (habit: Habit, initialDate?: string) => {
@@ -137,13 +145,21 @@ export default function Home() {
     setShowPoster(true);
   };
 
+  const handleOpenDetail = (habit: Habit) => {
+    navigate(`/habit/${habit.id}`);
+  };
+
   const activeHabit = activeId ? habits.find(h => h.id === activeId) : null;
+  const habitBadges = posterHabit
+    ? badges.filter(b => b.habitId === posterHabit.id)
+    : [];
 
   return (
     <div className="min-h-screen">
       <Navbar
         onAddHabit={handleAddHabit}
         onShowBadges={() => setShowBadgeGallery(true)}
+        onImport={() => setShowImportModal(true)}
         sortBy={sortBy}
         onSortChange={setSortBy}
       />
@@ -226,11 +242,12 @@ export default function Home() {
                       habit={habit}
                       checkIns={checkIns}
                       index={index}
-                      onToggleCheckIn={(date) => handleToggleCheckIn(habit.id, date)}
+                      onToggleCheckIn={(date, value) => handleToggleCheckIn(habit.id, date, value)}
                       onEdit={() => handleEditHabit(habit)}
                       onDelete={() => setShowDeleteConfirm(habit.id)}
                       onOpenCheckInModal={(initialDate) => handleOpenCheckInModal(habit, initialDate)}
                       onGeneratePoster={() => handleGeneratePoster(habit)}
+                      onOpenDetail={() => handleOpenDetail(habit)}
                     />
                   ))}
                 </div>
@@ -248,6 +265,7 @@ export default function Home() {
                       onDelete={() => {}}
                       onOpenCheckInModal={() => {}}
                       onGeneratePoster={() => {}}
+                      onOpenDetail={() => {}}
                     />
                   </div>
                 ) : null}
@@ -274,6 +292,8 @@ export default function Home() {
         habit={checkInHabit}
         checkIns={checkIns}
         onToggleCheckIn={toggleCheckIn}
+        onSetCompleted={setCheckInCompleted}
+        onUpdateNote={updateCheckInNote}
         initialDate={checkInInitialDate}
       />
 
@@ -289,6 +309,17 @@ export default function Home() {
         onClose={() => { setShowPoster(false); setPosterHabit(null); }}
         habit={posterHabit}
         checkIns={checkIns}
+        habitBadges={habitBadges}
+      />
+
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onParseFile={parseImportFile}
+        onApply={applyImportData}
+        currentHabitCount={habits.length}
+        currentCheckInCount={checkIns.length}
+        currentBadgeCount={badges.length}
       />
 
       {showDeleteConfirm && (

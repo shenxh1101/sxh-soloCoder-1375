@@ -1,5 +1,7 @@
 export type Frequency = 'daily' | 'weekly';
 
+export type GoalType = 'boolean' | 'numeric';
+
 export type BadgeType = 'streak_7' | 'streak_30' | 'monthly_perfect' | 'first_checkin';
 
 export interface Habit {
@@ -12,6 +14,9 @@ export interface Habit {
   group: string;
   priority: number;
   createdAt: string;
+  goalType: GoalType;
+  goalValue: number;
+  goalUnit: string;
 }
 
 export interface CheckIn {
@@ -21,6 +26,7 @@ export interface CheckIn {
   completed: boolean;
   note: string;
   isBackfilled: boolean;
+  value?: number;
 }
 
 export interface Badge {
@@ -44,6 +50,10 @@ export interface HabitStats {
   totalCheckIns: number;
   thisMonthCount: number;
   weeklyCount: number;
+  todayValue: number;
+  todayProgress: number;
+  thisMonthValue: number;
+  monthlyNumericRate: number;
 }
 
 export interface TrendDataPoint {

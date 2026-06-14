@@ -5,6 +5,7 @@ import * as LucideIcons from 'lucide-react';
 import type { Habit, CheckIn } from '@/types';
 import { useHabitStats, useHasCheckedIn } from '@/hooks/useHabitStats';
 import { todayStr, isFuture } from '@/utils/date';
+import { getMonthlyTargetTotal } from '@/utils/stats';
 import { ProgressRing } from './ui/ProgressRing';
 import { Heatmap } from './Heatmap';
 import {
@@ -17,17 +18,20 @@ import {
   CalendarCheck,
   History,
   Calendar,
-  X
+  X,
+  Eye,
+  Sparkles
 } from 'lucide-react';
 
 interface HabitCardProps {
   habit: Habit;
   checkIns: CheckIn[];
-  onToggleCheckIn: (date?: string) => void;
+  onToggleCheckIn: (date?: string, value?: number) => void;
   onEdit: () => void;
   onDelete: () => void;
   onOpenCheckInModal: (initialDate?: string) => void;
   onGeneratePoster: () => void;
+  onOpenDetail?: () => void;
   index: number;
 }
 
@@ -47,6 +51,7 @@ export const HabitCard = ({
   onDelete,
   onOpenCheckInModal,
   onGeneratePoster,
+  onOpenDetail,
   index
 }: HabitCardProps) => {
   const stats = useHabitStats(habit, checkIns);
@@ -74,11 +79,22 @@ export const HabitCard = ({
 
   const IconComponent = (LucideIcons as any)[habit.icon] || LucideIcons.Star;
 
+  const isNumeric = habit.goalType === 'numeric';
+  const todayRemaining = Math.max(0, habit.goalValue - stats.todayValue);
+  const defaultStep = Math.max(1, Math.floor(habit.goalValue / 4) || 1);
+  const nextValue = Math.min(stats.todayValue + defaultStep, habit.goalValue);
+  const monthlyTargetTotal = getMonthlyTargetTotal(habit);
+  const canShare = stats.monthlyCompletionRate >= 100;
+
   const handleCheckIn = () => {
     if (!isAnimating && !checkedToday) {
       setIsAnimating(true);
     }
-    onToggleCheckIn();
+    if (isNumeric) {
+      onToggleCheckIn(undefined, nextValue);
+    } else {
+      onToggleCheckIn();
+    }
     setTimeout(() => setIsAnimating(false), 500);
   };
 
@@ -107,31 +123,33 @@ export const HabitCard = ({
             <GripVertical size={16} />
           </button>
 
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center shadow-soft flex-shrink-0"
-            style={{ backgroundColor: `${habit.color}15` }}
-          >
-            <IconComponent size={22} style={{ color: habit.color }} />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <h3 className="font-semibold text-sm truncate">{habit.name}</h3>
-              <span
-                className={`priority-dot flex-shrink-0 ${priorityColors[Math.max(0, Math.min(4, habit.priority - 1))]}`}
-                title={`优先级 ${habit.priority}/5`}
-              />
+          <div className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer" onClick={onOpenDetail}>
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center shadow-soft flex-shrink-0"
+              style={{ backgroundColor: `${habit.color}15` }}
+            >
+              <IconComponent size={22} style={{ color: habit.color }} />
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="badge-pill bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
-                <Calendar size={10} />
-                {frequencyText}
-              </span>
-              {habit.group && (
-                <span className="badge-pill" style={{ backgroundColor: `${habit.color}15`, color: habit.color }}>
-                  {habit.group}
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <h3 className="font-semibold text-sm truncate">{habit.name}</h3>
+                <span
+                  className={`priority-dot flex-shrink-0 ${priorityColors[Math.max(0, Math.min(4, habit.priority - 1))]}`}
+                  title={`优先级 ${habit.priority}/5`}
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="badge-pill bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
+                  <Calendar size={10} />
+                  {frequencyText}
                 </span>
-              )}
+                {habit.group && (
+                  <span className="badge-pill" style={{ backgroundColor: `${habit.color}15`, color: habit.color }}>
+                    {habit.group}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -148,6 +166,15 @@ export const HabitCard = ({
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-full mt-1 z-20 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-soft-lg min-w-[140px] animate-slide-down">
+                {onOpenDetail && (
+                  <button
+                    onClick={() => { onOpenDetail(); setShowMenu(false); }}
+                    className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    <Eye size={14} />
+                    查看详情
+                  </button>
+                )}
                 <button
                   onClick={() => { onEdit(); setShowMenu(false); }}
                   className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
@@ -168,6 +195,12 @@ export const HabitCard = ({
                 >
                   <CalendarCheck size={14} />
                   生成海报
+                  {canShare && (
+                    <span className="ml-auto inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded-full text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30">
+                      <Sparkles size={10} />
+                      可分享
+                    </span>
+                  )}
                 </button>
                 <div className="my-1 h-px bg-slate-200 dark:bg-slate-700" />
                 <button
@@ -199,8 +232,19 @@ export const HabitCard = ({
           <CalendarCheck size={18} className="text-accent-500" />
           <div className="leading-tight">
             <div className="font-bold text-slate-700 dark:text-slate-200">
-              {stats.thisMonthCount}
-              <span className="text-[10px] font-normal ml-0.5 text-slate-500 dark:text-slate-400">次</span>
+              {isNumeric ? (
+                <>
+                  {stats.thisMonthValue}
+                  <span className="text-[10px] font-normal ml-0.5 text-slate-500 dark:text-slate-400">
+                    /{monthlyTargetTotal} {habit.goalUnit}
+                  </span>
+                </>
+              ) : (
+                <>
+                  {stats.thisMonthCount}
+                  <span className="text-[10px] font-normal ml-0.5 text-slate-500 dark:text-slate-400">次</span>
+                </>
+              )}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400">本月完成</div>
           </div>
@@ -216,6 +260,36 @@ export const HabitCard = ({
           />
         </div>
       </div>
+
+      {isNumeric && (
+        <div className="mb-4 px-4 py-3 rounded-xl" style={{ backgroundColor: `${habit.color}08` }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">今日进度</span>
+            <span className="text-xs font-bold" style={{ color: habit.color }}>
+              {stats.todayProgress}%
+            </span>
+          </div>
+          <div className="w-full h-2.5 rounded-full bg-slate-200/60 dark:bg-slate-700/50 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${stats.todayProgress}%`,
+                background: `linear-gradient(90deg, ${habit.color} 0%, ${habit.color}cc 100%)`,
+                boxShadow: `0 0 8px ${habit.color}40`
+              }}
+            />
+          </div>
+          <div className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
+            今日：{stats.todayValue} / {habit.goalValue} {habit.goalUnit}
+            {todayRemaining > 0 && (
+              <span className="ml-1 text-slate-500 dark:text-slate-400">，还差 {todayRemaining}</span>
+            )}
+            {todayRemaining === 0 && (
+              <span className="ml-1 font-medium" style={{ color: habit.color }}>· 已达标！</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 px-1">
         <Heatmap
@@ -239,7 +313,7 @@ export const HabitCard = ({
           disabled={checkedToday}
           className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${checkedToday
               ? 'bg-grad-secondary shadow-lg cursor-default'
-              : `hover:scale-110 shadow-xl hover:shadow-2xl ${isAnimating ? 'animate-bounce-in' : 'animate-pulse-ring'}`
+              : `hover:scale-110 shadow-xl hover:shadow-2xl ${isAnimating ? 'animate-bounce-in' : isNumeric ? 'animate-pulse-ring' : 'animate-pulse-ring'}`
             }`}
           style={{
             background: checkedToday
@@ -249,6 +323,8 @@ export const HabitCard = ({
         >
           {checkedToday ? (
             <Check size={24} className="text-white animate-check" strokeWidth={3} />
+          ) : isNumeric ? (
+            <span className="text-white font-bold text-sm">{stats.todayProgress}%</span>
           ) : (
             <X size={22} className="text-white font-light" />
           )}

@@ -1,14 +1,15 @@
-import { Sun, Moon, Download, Plus, Award, ArrowUpDown } from 'lucide-react';
+import { Sun, Moon, Download, Plus, Award, ArrowUpDown, UploadCloud } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 
 interface NavbarProps {
   onAddHabit: () => void;
   onShowBadges: () => void;
+  onImport: () => void;
   sortBy: 'order' | 'priority' | 'group';
   onSortChange: (sort: 'order' | 'priority' | 'group') => void;
 }
 
-export const Navbar = ({ onAddHabit, onShowBadges, sortBy, onSortChange }: NavbarProps) => {
+export const Navbar = ({ onAddHabit, onShowBadges, onImport, sortBy, onSortChange }: NavbarProps) => {
   const { settings, toggleDarkMode, exportData, badges } = useAppStore();
 
   const sortOptions: { value: 'order' | 'priority' | 'group'; label: string }[] = [
@@ -67,16 +68,29 @@ export const Navbar = ({ onAddHabit, onShowBadges, sortBy, onSortChange }: Navba
             )}
           </button>
 
-          <button
-            onClick={exportData}
-            className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all group"
-            title="导出 CSV"
-          >
-            <Download
-              size={18}
-              className="text-accent-600 group-hover:scale-110 transition-transform"
-            />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onImport}
+              className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all group"
+              title="导入 CSV 备份"
+            >
+              <UploadCloud
+                size={18}
+                className="text-brand-600 dark:text-brand-400 group-hover:scale-110 transition-transform"
+              />
+            </button>
+
+            <button
+              onClick={exportData}
+              className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all group"
+              title="导出 CSV"
+            >
+              <Download
+                size={18}
+                className="text-accent-600 group-hover:scale-110 transition-transform"
+              />
+            </button>
+          </div>
 
           <button
             onClick={toggleDarkMode}

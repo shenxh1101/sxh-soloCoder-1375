@@ -90,3 +90,25 @@ export const getRecentDays = (days: number): string[] => {
   }
   return result;
 };
+
+export const parseDisplayDate = (str: string): string | null => {
+  try {
+    if (!str) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const m = str.match(/^(\d{1,2})月(\d{1,2})日/);
+    if (m) {
+      const month = parseInt(m[1]);
+      const day = parseInt(m[2]);
+      const year = new Date().getFullYear();
+      const d = new Date(year, month - 1, day);
+      return format(d, 'yyyy-MM-dd');
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return format(d, 'yyyy-MM-dd');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};

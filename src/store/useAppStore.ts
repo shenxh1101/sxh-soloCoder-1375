@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware';
 import type { Habit, CheckIn, Badge, AppSettings } from '@/types';
 import { generateId, checkBadgesToUnlock } from '@/utils/badges';
 import { todayStr } from '@/utils/date';
-import { hasCheckedIn, getCheckInByDate } from '@/utils/stats';
-import { exportToCSV } from '@/utils/csv';
+import { hasCheckedIn, getCheckInByDate, isDayCompleted } from '@/utils/stats';
+import { exportToCSV, parseImportCSV, mergeImportData, ImportPreview } from '@/utils/csv';
 import { subDays, format } from 'date-fns';
 
 interface AppStore {
@@ -18,13 +18,17 @@ interface AppStore {
   updateHabit: (id: string, updates: Partial<Habit>) => void;
   deleteHabit: (id: string) => void;
 
-  toggleCheckIn: (habitId: string, date: string, note?: string, isBackfilled?: boolean) => void;
-  updateCheckInNote: (checkInId: string, note: string) => void;
+  toggleCheckIn: (habitId: string, date: string, note?: string, isBackfilled?: boolean, value?: number) => void;
+  setCheckInCompleted: (habitId: string, date: string, completed: boolean, value?: number, isBackfilled?: boolean) => void;
+  updateCheckInNote: (habitId: string, date: string, note: string) => void;
 
   reorderCards: (newOrder: string[]) => void;
   toggleDarkMode: () => void;
 
   exportData: () => void;
+  importData: (file: File, mode: 'overwrite' | 'merge') => Promise<ImportPreview>;
+  parseImportFile: (file: File) => Promise<ImportPreview>;
+  applyImportData: (preview: ImportPreview, mode: 'overwrite' | 'merge') => void;
   clearNewBadges: () => void;
 }
 
@@ -40,7 +44,10 @@ const generateSampleData = (): { habits: Habit[]; checkIns: CheckIn[]; badges: B
       targetCount: 1,
       group: '自我提升',
       priority: 5,
-      createdAt: format(subDays(now, 45), 'yyyy-MM-dd')
+      createdAt: format(subDays(now, 45), 'yyyy-MM-dd'),
+      goalType: 'numeric',
+      goalValue: 30,
+      goalUnit: '分钟'
     },
     {
       id: 'habit-2',
@@ -51,7 +58,10 @@ const generateSampleData = (): { habits: Habit[]; checkIns: CheckIn[]; badges: B
       targetCount: 3,
       group: '健康生活',
       priority: 4,
-      createdAt: format(subDays(now, 60), 'yyyy-MM-dd')
+      createdAt: format(subDays(now, 60), 'yyyy-MM-dd'),
+      goalType: 'numeric',
+      goalValue: 45,
+      goalUnit: '分钟'
     },
     {
       id: 'habit-3',
@@ -62,7 +72,10 @@ const generateSampleData = (): { habits: Habit[]; checkIns: CheckIn[]; badges: B
       targetCount: 1,
       group: '健康生活',
       priority: 3,
-      createdAt: format(subDays(now, 30), 'yyyy-MM-dd')
+      createdAt: format(subDays(now, 30), 'yyyy-MM-dd'),
+      goalType: 'numeric',
+      goalValue: 8,
+      goalUnit: '杯'
     },
     {
       id: 'habit-4',
@@ -73,7 +86,10 @@ const generateSampleData = (): { habits: Habit[]; checkIns: CheckIn[]; badges: B
       targetCount: 1,
       group: '作息规律',
       priority: 4,
-      createdAt: format(subDays(now, 20), 'yyyy-MM-dd')
+      createdAt: format(subDays(now, 20), 'yyyy-MM-dd'),
+      goalType: 'boolean',
+      goalValue: 1,
+      goalUnit: '次'
     },
     {
       id: 'habit-5',
@@ -84,23 +100,31 @@ const generateSampleData = (): { habits: Habit[]; checkIns: CheckIn[]; badges: B
       targetCount: 5,
       group: '自我提升',
       priority: 5,
-      createdAt: format(subDays(now, 90), 'yyyy-MM-dd')
+      createdAt: format(subDays(now, 90), 'yyyy-MM-dd'),
+      goalType: 'numeric',
+      goalValue: 60,
+      goalUnit: '分钟'
     }
   ];
 
   const checkIns: CheckIn[] = [];
 
   const generateStreak = (habitId: string, startDaysAgo: number, endDaysAgo: number, skipDays: number[] = []) => {
+    const habit = habits.find(h => h.id === habitId)!;
     for (let i = startDaysAgo; i >= endDaysAgo; i--) {
       if (skipDays.includes(i)) continue;
       const date = format(subDays(now, i), 'yyyy-MM-dd');
+      const value = habit.goalType === 'numeric'
+        ? Math.round(habit.goalValue * (0.8 + Math.random() * 0.5) * 10) / 10
+        : undefined;
       checkIns.push({
         id: `ci-${habitId}-${i}`,
         habitId,
         date,
         completed: true,
-        note: '',
-        isBackfilled: i > 0
+        note: i % 7 === 0 ? '今天状态不错，继续保持！' : '',
+        isBackfilled: i > 0,
+        value
       });
     }
   };
@@ -173,6 +197,9 @@ export const useAppStore = create<AppStore>()(
 
       addHabit: (habitData) => {
         const newHabit: Habit = {
+          goalType: 'boolean',
+          goalValue: 1,
+          goalUnit: '次',
           ...habitData,
           id: generateId(),
           createdAt: todayStr()
@@ -204,15 +231,30 @@ export const useAppStore = create<AppStore>()(
         }));
       },
 
-      toggleCheckIn: (habitId, date, note = '', isBackfilled = false) => {
+      toggleCheckIn: (habitId, date, note = '', isBackfilled = false, value) => {
         const state = get();
         const existing = getCheckInByDate(habitId, date, state.checkIns);
+        const habit = state.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        const willBeCompleted = existing ? !isDayCompleted(habit, date, state.checkIns) : true;
+
+        let newValue = value;
+        if (willBeCompleted && newValue === undefined && habit.goalType === 'numeric') {
+          newValue = habit.goalValue;
+        }
 
         let newCheckIns: CheckIn[];
         if (existing) {
           newCheckIns = state.checkIns.map(c =>
             c.id === existing.id
-              ? { ...c, completed: !c.completed, note, isBackfilled }
+              ? {
+                  ...c,
+                  completed: willBeCompleted,
+                  note,
+                  isBackfilled,
+                  value: newValue !== undefined ? newValue : c.value
+                }
               : c
           );
         } else {
@@ -222,22 +264,17 @@ export const useAppStore = create<AppStore>()(
               id: generateId(),
               habitId,
               date,
-              completed: true,
+              completed: willBeCompleted,
               note,
-              isBackfilled
+              isBackfilled,
+              value: newValue
             }
           ];
         }
 
-        const willComplete = !existing || !existing.completed;
         let newBadges: Badge[] = [];
-
-        if (willComplete) {
-          const habit = state.habits.find(h => h.id === habitId);
-          if (habit) {
-            const tempCheckIns = newCheckIns;
-            newBadges = checkBadgesToUnlock(habit, tempCheckIns, state.badges);
-          }
+        if (willBeCompleted) {
+          newBadges = checkBadgesToUnlock(habit, newCheckIns, state.badges);
         }
 
         set({
@@ -247,12 +284,79 @@ export const useAppStore = create<AppStore>()(
         });
       },
 
-      updateCheckInNote: (checkInId, note) => {
-        set(state => ({
-          checkIns: state.checkIns.map(c =>
-            c.id === checkInId ? { ...c, note } : c
-          )
-        }));
+      setCheckInCompleted: (habitId, date, completed, value, isBackfilled = false) => {
+        const state = get();
+        const existing = getCheckInByDate(habitId, date, state.checkIns);
+        const habit = state.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        let newCheckIns: CheckIn[];
+        if (existing) {
+          newCheckIns = state.checkIns.map(c =>
+            c.id === existing.id
+              ? {
+                  ...c,
+                  completed,
+                  isBackfilled: c.isBackfilled || isBackfilled,
+                  value: value !== undefined ? value : c.value
+                }
+              : c
+          );
+        } else {
+          newCheckIns = [
+            ...state.checkIns,
+            {
+              id: generateId(),
+              habitId,
+              date,
+              completed,
+              note: '',
+              isBackfilled,
+              value
+            }
+          ];
+        }
+
+        let newBadges: Badge[] = [];
+        if (completed && !existing?.completed) {
+          newBadges = checkBadgesToUnlock(habit, newCheckIns, state.badges);
+        }
+
+        set({
+          checkIns: newCheckIns,
+          badges: [...state.badges, ...newBadges],
+          newlyUnlockedBadges: newBadges
+        });
+      },
+
+      updateCheckInNote: (habitId, date, note) => {
+        const state = get();
+        const existing = getCheckInByDate(habitId, date, state.checkIns);
+
+        if (existing) {
+          set(s => ({
+            checkIns: s.checkIns.map(c =>
+              c.id === existing.id ? { ...c, note } : c
+            )
+          }));
+        } else {
+          const habit = state.habits.find(h => h.id === habitId);
+          if (!habit) return;
+          set(s => ({
+            checkIns: [
+              ...s.checkIns,
+              {
+                id: generateId(),
+                habitId,
+                date,
+                completed: false,
+                note,
+                isBackfilled: date !== todayStr(),
+                value: 0
+              }
+            ]
+          }));
+        }
       },
 
       reorderCards: (newOrder) => {
@@ -272,12 +376,52 @@ export const useAppStore = create<AppStore>()(
         exportToCSV(state.habits, state.checkIns, state.badges);
       },
 
+      parseImportFile: async (file) => {
+        return await parseImportCSV(file);
+      },
+
+      applyImportData: (preview, mode) => {
+        const state = get();
+        const result = mergeImportData(
+          { habits: state.habits, checkIns: state.checkIns, badges: state.badges },
+          preview,
+          mode
+        );
+        set({
+          habits: result.habits,
+          checkIns: result.checkIns,
+          badges: result.badges,
+          settings: {
+            ...state.settings,
+            cardOrder: result.habits.map(h => h.id)
+          }
+        });
+      },
+
+      importData: async (file, mode) => {
+        const preview = await parseImportCSV(file);
+        get().applyImportData(preview, mode);
+        return preview;
+      },
+
       clearNewBadges: () => {
         set({ newlyUnlockedBadges: [] });
       }
     }),
     {
-      name: 'habit-tracker-data'
+      name: 'habit-tracker-data-v2',
+      migrate: (persistedState: any, version) => {
+        const state = persistedState as any;
+        if (state.habits && state.habits.length > 0) {
+          state.habits = state.habits.map((h: any) => ({
+            goalType: 'boolean',
+            goalValue: 1,
+            goalUnit: '次',
+            ...h
+          }));
+        }
+        return state;
+      }
     }
   )
 );
